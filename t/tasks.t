@@ -2,9 +2,10 @@ use 5.20.0;
 
 use Test::More;
 
-use App::Dothe::Tasks;
+use App::Dothe;
 
-my $tasks = App::Dothe::Tasks->new(
+my $tasks = App::Dothe->new(
+    target => '',
     vars => {
         foo => [ 1, 2 ] 
     }

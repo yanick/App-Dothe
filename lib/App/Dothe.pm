@@ -1,19 +1,32 @@
-package App::Dothe::Tasks;
+package App::Dothe;
+# ABSTRACT: YAML-based build system
 
 use 5.20.0;
 use warnings;
 
-use Moose;
+use MooseX::App::Simple;
 
 use YAML::XS qw/ LoadFile /;
 use App::Dothe::Task;
 
+use Log::Any::Adapter;
+Log::Any::Adapter->set('Stdout', log_level => 'info' );
+
 use List::AllUtils qw/ pairmap /;
 
-use experimental qw/
-    signatures
-    postderef
-/;
+use experimental qw/ signatures postderef /;
+
+option force => (
+    is => 'ro',
+    documentation => 'force the tasks to be run',
+    default => 0,
+    isa => 'Bool',
+);
+
+parameter target => (
+    is => 'ro',
+    required => 1,
+);
 
 has force => (
     is => 'ro',
@@ -85,9 +98,9 @@ has config => (
     default => sub($self) { LoadFile( './Taskfile.yml' ) },
 );
 
-sub run( $self, @tasks ) {
+sub run( $self ) {
 
-    $self->task($_)->run( ) for @tasks;
+    $self->task($self->target)->run;
 
 }
 
