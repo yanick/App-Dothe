@@ -1,0 +1,38 @@
+#!/usr/bin/env perl 
+
+package App::Dothe;
+
+use MooseX::App::Simple;
+
+use App::Dothe::Tasks;
+
+use Log::Any::Adapter;
+
+Log::Any::Adapter->set('Stdout', log_level => 'info' );
+
+use experimental qw/
+    signatures
+    postderef
+/;
+
+option force => (
+    is => 'ro',
+    documentation => 'force the tasks to be run',
+    default => 0,
+    isa => 'Bool',
+);
+
+parameter task => (
+    is => 'ro',
+    required => 1,
+);
+
+
+sub run($self) {
+    my $tasks = App::Dothe::Tasks->new( force => $self->force );
+
+    $tasks->run( $self->task );
+}
+
+
+App::Dothe->new_with_options->run;
