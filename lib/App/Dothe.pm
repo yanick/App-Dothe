@@ -16,6 +16,16 @@ use List::AllUtils qw/ pairmap /;
 
 use experimental qw/ signatures postderef /;
 
+option debug => (
+    is => 'ro',
+    documentation => 'enable debugging logs',
+    default => 0,
+    isa => 'Bool',
+    trigger => sub {
+        Log::Any::Adapter->set('Stdout', log_level => 'debug' );
+    },
+);
+
 option force => (
     is => 'ro',
     documentation => 'force the tasks to be run',
