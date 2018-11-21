@@ -1,4 +1,6 @@
 #!/usr/bin/perl 
+# PODNAME: dothe
+# ABSTRACT: CLI for App::Dothe, a YAML-based build system
 
 use App::Dothe;
 
