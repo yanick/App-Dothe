@@ -38,12 +38,6 @@ parameter target => (
     required => 1,
 );
 
-has force => (
-    is => 'ro',
-    lazy => 1,
-    default => 0,
-);
-
 has raw_vars => (
     is	    => 'ro',
     isa 	=> 'HashRef',

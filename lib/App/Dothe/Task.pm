@@ -21,15 +21,6 @@ use experimental qw/
 use Path::Tiny;
 use File::Wildcard;
 
-my $File = InstanceOf["Path::Tiny"];
-my $ListFiles = ArrayRef([$File])
-    ->plus_coercions(
-        ArrayRef ,=> sub { 
-            [ map { path($_) } 
-              map { File::Wildcard->new(path=> [ split '/', $_ ])->all } @$_ ]
-        }
-    );
-
 has name => (
     is       => 'ro',
     required => 1,
@@ -45,21 +36,47 @@ has cmds => (
     },
 );
 
+has raw_sources => (
+    is	    => 'ro',
+    default => sub { [] },
+    init_arg => 'sources',
+);
+
+has raw_generates => (
+    is	    => 'ro',
+    default => sub { [] },
+    init_arg => 'generates',
+);
+
+
 has sources => (
     is => 'ro',
-    isa => $ListFiles,
-    coerce => 1,
+    init_arg => undef,
     lazy => 1,
-    default => sub { [] },
+    default => sub($self) { 
+        $self->vars->{sources} = $self->expand_files( $self->raw_sources )
+    },
 );
 
 has generates => (
     is => 'ro',
-    isa => $ListFiles,
-    coerce => 1,
+    init_arg => undef,
     lazy => 1,
-    default => sub { [] },
+    default => sub { 
+        $_[0]->vars->{generates} = $_[0]->expand_files( $_[0]->raw_generates )
+    },
 );
+
+sub expand_files($self, $list ) {
+    $list = [ $list ] unless ref $list;
+
+    [ 
+    map { File::Wildcard->new( path=> $_ )->all } 
+    map { s!\*\*!/!gr }
+    map { $self->render( $_, $self->vars ) }
+    @$list ]
+}
+
 
 has tasks => (
     is	    => 'ro',
@@ -120,7 +137,6 @@ sub _build_vars($self) {
 
     %vars = ( 
         %vars, 
-        sources =>  [ map { ''.$_ } $self->sources->@* ],
         pairmap { $a => $self->render( $b, \%vars ) } $self->raw_vars->%* 
     );
 
