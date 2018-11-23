@@ -14,6 +14,8 @@ Log::Any::Adapter->set('Stdout', log_level => 'info' );
 
 use List::AllUtils qw/ pairmap /;
 
+use Text::Template;
+
 use experimental qw/ signatures postderef /;
 
 option debug => (
@@ -66,7 +68,7 @@ sub render($self,$template,$vars) {
         return { pairmap { $a => $self->render($b,$vars) } %$template }
     }
 
-    Template::Mustache->render( $template, $vars );
+    return $self->template($template)->fill_in(HASH => $vars );
 }
 
 sub _build_vars($self) {
@@ -84,17 +86,13 @@ has tasks => (
     is => 'ro',
     lazy => 1,
     traits => [ 'Hash' ],
-    default => sub($self) {
-        return { pairmap {
-            $a => App::Dothe::Task->new( name => $a, %$b, tasks => $self );
-        }
-            $self->config->{tasks}->%*
-        }
-    },
-    handles => {
-        task => 'get'
-    },
+    default => sub($self) { +{} },
 );
+
+sub task($self,$name) {
+    return $self->{tasks}{$name} ||= App::Dothe::Task->new( 
+        name => $name, tasks => $self, $self->config->{tasks}{$name}->%* );
+}
 
 has config => (
     is => 'ro',
@@ -104,8 +102,17 @@ has config => (
 
 sub run( $self ) {
 
+    if ( my $code = $self->config->{code} ) {
+        eval join '', 'package App::Dothe::Sandbox;', @$code;
+    }
+
     $self->task($self->target)->run;
 
+}
+
+sub template ($self,$source) {
+    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ], 
+        SOURCE => $source );
 }
 
 1;

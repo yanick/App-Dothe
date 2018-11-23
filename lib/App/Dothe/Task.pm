@@ -11,7 +11,8 @@ use Type::Tiny;
 use List::AllUtils qw/ min pairmap /;
 use Ref::Util qw/ is_arrayref is_hashref /;
 
-use Template::Mustache;
+use Text::Template;
+
 
 use experimental qw/
     signatures
@@ -26,6 +27,7 @@ has name => (
     required => 1,
 );
 
+
 has cmds => (
     is => 'ro',
     lazy => 1,
@@ -37,17 +39,16 @@ has cmds => (
 );
 
 has raw_sources => (
-    is	    => 'ro',
-    default => sub { [] },
+    is => 'ro',
     init_arg => 'sources',
+    default => sub { [] },
 );
 
 has raw_generates => (
-    is	    => 'ro',
-    default => sub { [] },
+    is => 'ro',
     init_arg => 'generates',
+    default => sub { [] },
 );
-
 
 has sources => (
     is => 'ro',
@@ -62,8 +63,8 @@ has generates => (
     is => 'ro',
     init_arg => undef,
     lazy => 1,
-    default => sub { 
-        $_[0]->vars->{generates} = $_[0]->expand_files( $_[0]->raw_generates )
+    default => sub ($self){ 
+        $self->vars->{generates} = $self->expand_files( $self->raw_generates )
     },
 );
 
@@ -106,17 +107,19 @@ has raw_vars => (
     is	    => 'ro',
     isa 	=> 'HashRef',
     init_arg => 'vars',
-    default => sub($self) {
+    default => sub {
         +{}
     },
 );
 
+
+
 has vars => (
     is => 'ro',
     lazy => 1,
+    init_arg => undef,
     isa => 'HashRef',
     builder => '_build_vars',
-    init_arg => undef,
 );
 
 
@@ -129,15 +132,19 @@ sub render($self,$template,$vars) {
         return { pairmap { $a => $self->render($b,$vars) } %$template }
     }
 
-    Template::Mustache->render( $template, $vars );
+    no warnings 'uninitialized';
+    $self->template( $template )->fill_in( HASH => $vars,
+        PACKAGE => 'App::Dothe::Sandbox',
+    );
 }
 
 sub _build_vars($self) {
-    my %vars = $self->tasks->vars->%*; 
+    my %vars = ( $self->tasks->vars->%*, $self->raw_vars->%* ); 
 
     %vars = ( 
         %vars, 
-        pairmap { $a => $self->render( $b, \%vars ) } $self->raw_vars->%* 
+        pairmap { $a => $self->render( $b, \%vars ) } 
+            $self->raw_vars->%*
     );
 
     return \%vars;
@@ -149,7 +156,10 @@ has foreach => (
 );
 
 sub foreach_vars($self) {
-    my $foreach = $self->foreach or return +{};
+    my $foreach = $self->foreach or return;
+
+    $self->sources;
+    $self->generates;
 
     return map { +{ item => $_ } } $self->vars->{$foreach}->@*;
 }
@@ -184,17 +194,12 @@ sub dependencies($self) {
     return grep { $_ ne $self->name } $self->dependency_tree->topological_sort;
 }
 
-before run => sub ($self) {
-    $log->infof( "running task %s", $self->name );
-};
-
-before run => sub($self) {
+sub run($self) {
     my @deps = $self->dependencies;
 
     $self->tasks->task($_)->run for @deps;
-};
 
-sub run($self) {
+    $log->infof( "running task %s", $self->name );
 
     if ( $self->is_uptodate ) {
         $log->infof( '%s is up-to-date', $self->name );
@@ -202,21 +207,72 @@ sub run($self) {
     }
 
     my $vars = $self->vars;
+    $self->sources;
+    $self->generates;
 
+    if( $self->foreach ) {
         for my $entry ( $self->foreach_vars ) {
-    for my $command ( $self->commands ) {
-
-            my $vars = { $self->vars->%*, %$entry };
-            my $processed = Template::Mustache->render( $command, $vars );
-
-            $log->debug( "vars", $vars );
-            $log->infof( "> %s", $processed );
-            system $processed or next;
-
-            die "command failed, aborting\n";
+            App::Dothe::Task->new(
+                tasks => $self->tasks,
+                name => ( join ' - ', $self->name, values %$entry ),
+                sources => $self->sources,
+                generates => $self->generates,
+                vars => { %$vars, %$entry },
+                cmds => $self->cmds,
+            )->run;
         }
+        return;
     }
 
+    for my $command ( $self->commands ) {
+            $self->run_command( $command, $vars );
+    }
+
+}
+
+sub run_command($self,$command,$vars) {
+
+    if( !ref $command ) {
+        $command = { cmd => $command };
+    }
+
+    use PerlX::Maybe;
+
+    if( my $subtask = $command->{task} ) {
+            my $t = $self->tasks->task($subtask);
+            my $newt = App::Dothe::Task->new(
+                name => $t->name,
+                tasks => $t->tasks,
+                maybe foreach => $t->foreach,
+                sources => $t->raw_sources,
+                generates => $t->raw_generates,
+                vars => {
+                    $self->vars->%*,
+                    $t->vars->%*,
+                    eval { $command->{vars}->%* }
+                },
+                cmds => $t->cmds,
+            );
+            $newt->run;
+            return;
+    }
+
+
+    no warnings 'uninitialized';
+    use DDP; p $vars;
+    my $processed = $self->template( $command->{cmd} )->fill_in(
+        HASH => $vars,
+        PACKAGE => 'App::Dothe::Sandbox',
+    );
+
+    $log->debug( "vars", $vars );
+    $log->infof( "> %s", $processed );
+    system $processed and die "command failed, aborting\n";
+}
+
+sub template ($self,$source) {
+    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ], 
+        SOURCE => $source );
 }
 
 1;
