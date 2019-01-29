@@ -10,17 +10,16 @@ use Types::Standard qw/ ArrayRef InstanceOf /;
 use Type::Tiny;
 use List::AllUtils qw/ min pairmap /;
 use Ref::Util qw/ is_arrayref is_hashref /;
-
+use PerlX::Maybe;
 use Text::Template;
+use Path::Tiny;
+use File::Wildcard;
 
 
 use experimental qw/
     signatures
     postderef
 /;
-
-use Path::Tiny;
-use File::Wildcard;
 
 has name => (
     is       => 'ro',
@@ -54,7 +53,7 @@ has sources => (
     is => 'ro',
     init_arg => undef,
     lazy => 1,
-    default => sub($self) { 
+    default => sub($self) {
         $self->vars->{sources} = $self->expand_files( $self->raw_sources )
     },
 );
@@ -63,7 +62,7 @@ has generates => (
     is => 'ro',
     init_arg => undef,
     lazy => 1,
-    default => sub ($self){ 
+    default => sub ($self){
         $self->vars->{generates} = $self->expand_files( $self->raw_generates )
     },
 );
@@ -71,8 +70,8 @@ has generates => (
 sub expand_files($self, $list ) {
     $list = [ $list ] unless ref $list;
 
-    [ 
-    map { File::Wildcard->new( path=> $_ )->all } 
+    [
+    map { File::Wildcard->new( path=> $_ )->all }
     map { s!\*\*!/!gr }
     map { $self->render( $_, $self->vars ) }
     @$list ]
@@ -112,8 +111,6 @@ has raw_vars => (
     },
 );
 
-
-
 has vars => (
     is => 'ro',
     lazy => 1,
@@ -139,11 +136,11 @@ sub render($self,$template,$vars) {
 }
 
 sub _build_vars($self) {
-    my %vars = ( $self->tasks->vars->%*, $self->raw_vars->%* ); 
+    my %vars = ( $self->tasks->vars->%*, $self->raw_vars->%* );
 
-    %vars = ( 
-        %vars, 
-        pairmap { $a => $self->render( $b, \%vars ) } 
+    %vars = (
+        %vars,
+        pairmap { $a => $self->render( $b, \%vars ) }
             $self->raw_vars->%*
     );
 
@@ -236,8 +233,6 @@ sub run_command($self,$command,$vars) {
         $command = { cmd => $command };
     }
 
-    use PerlX::Maybe;
-
     if( my $subtask = $command->{task} ) {
             my $t = $self->tasks->task($subtask);
             my $newt = App::Dothe::Task->new(
@@ -259,7 +254,6 @@ sub run_command($self,$command,$vars) {
 
 
     no warnings 'uninitialized';
-    use DDP; p $vars;
     my $processed = $self->template( $command->{cmd} )->fill_in(
         HASH => $vars,
         PACKAGE => 'App::Dothe::Sandbox',
@@ -271,7 +265,7 @@ sub run_command($self,$command,$vars) {
 }
 
 sub template ($self,$source) {
-    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ], 
+    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ],
         SOURCE => $source );
 }
 

@@ -72,11 +72,11 @@ sub render($self,$template,$vars) {
 }
 
 sub _build_vars($self) {
-    my %vars; 
+    my %vars;
 
-    %vars = ( 
-        %vars, 
-        pairmap { $a => $self->render( $b, \%vars ) } $self->raw_vars->%* 
+    %vars = (
+        %vars,
+        pairmap { $a => $self->render( $b, \%vars ) } $self->raw_vars->%*
     );
 
     return \%vars;
@@ -90,14 +90,21 @@ has tasks => (
 );
 
 sub task($self,$name) {
-    return $self->{tasks}{$name} ||= App::Dothe::Task->new( 
+    return $self->{tasks}{$name} ||= App::Dothe::Task->new(
         name => $name, tasks => $self, $self->config->{tasks}{$name}->%* );
 }
+
+option file => (
+    is => 'ro',
+    documentation => 'configuration file',
+    isa => 'Str',
+    default => './Dothe.yml',
+);
 
 has config => (
     is => 'ro',
     lazy => 1,
-    default => sub($self) { LoadFile( './Taskfile.yml' ) },
+    default => sub($self) { LoadFile( $self->file ) },
 );
 
 sub run( $self ) {
@@ -111,8 +118,151 @@ sub run( $self ) {
 }
 
 sub template ($self,$source) {
-    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ], 
+    return Text::Template->new( TYPE => 'STRING', DELIMITERS => [ '{{', '}}' ],
         SOURCE => $source );
 }
 
 1;
+
+=head1 DESCRIPTION
+
+Task runner heavily inspired by Task (L<https://github.com/go-task/task>).
+Basically, I wanted C<Task>, but with a C<foreach> construct.
+
+See C<perldoc App::DoThe> for the syntax of the F<Dothe.yml> file.
+
+=head1 DOTHE SYNTAX
+
+The configuration file is in YAML. It follows, by and large, the
+format used by Task.
+
+By default, `dothe` looks for the file `Dothe.yml`.
+
+Where entries can be templates, they are evaluated via L<Text::Template>.
+Basically, that means that in a template all that is surrounded by double curley braces
+is evaluated as Perl code. Those code snippets are evaluated within the
+C<App::Dothe::Sandbox> namespace, and have all the C<vars> variables
+accessible to them.
+
+
+=head2 C<code> section
+
+Takes an array. Each item will be eval'ed in the namespace
+used by the template code.
+
+For example, to have access to L<Path::Tiny>'s
+C<path>:
+
+    code:
+        - use Path::Tiny;
+
+    tasks:
+        import-all:
+            sources:
+                - /home/yanick/work/blog_entries/**/entry
+            foreach: sources
+            cmds:
+                - task: import
+                  vars: { dir: '{{ path($item)->parent }}' }
+
+=head2 C<vars> section
+
+Takes a hash of variable names and values. Those are variables that will be accessible to all
+tasks.
+
+E.g.,
+
+    vars:
+        entries_file: ./content/_shared/entries.md
+        blog_entries_root: /home/yanick/work/blog_entries
+
+=head2 C<tasks> section
+
+Takes a hash of task names and their definitions.
+
+E.g.,
+
+    tasks:
+
+        something:
+            sources: [ ./src/foo.source ]
+            generates: [ ./dest/foo.dest ]
+            foreach: sources
+            cmds:
+                - ./tools/process_entry.pl {{$item}}
+
+=head3 C<task>
+
+Defines a specific task.
+
+=head4 C<vars>
+
+Hash of variable names and values to be made accessible to the
+task and its subtasks.
+
+Variable values can be templates, which have visibility of
+previously declared variables.
+
+A locally defined variable will mask the definition of a global
+variable.
+
+=head4 C<deps>
+
+Array of task dependencies. If present, Dothe will build the graph
+of dependencies (via L<Graph::Directed>) and run them in their
+topological order.
+
+    deploy:
+        deps: [ clean, build, test ]
+        cmds:
+            - dzil release
+
+=head4 C<sources>
+
+Array of files. Can take glob patterns that will be expanded using
+L<Path::Tiny::Glob>. The result is accessible via the C<sources> variable.
+
+    foo:
+        sources: [ './lib/**/*.pm' ]
+        foreach: sources
+        cmds:
+            - perl -c {{$item}}
+
+=head4 C<generates>
+
+Array of files. If C<sources> and C<generates> are both given, the task will
+only be run if any of the sources (or the F<Dothe.yml> file itself) has been
+modified after the C<generates> files.
+
+Can take glob patterns that will be expanded using
+L<Path::Tiny::Glob>. The result is accessible via the C<generates> variable.
+
+=head4 C<foreach>
+
+Takes the name of a variable that must hold an array. If presents,
+the C<cmds> will be run for each value of that variable, which will
+be accessible via C<$item>.
+
+=head4 C<cmds>
+
+List of shell commands to run. The entries can be templates.
+As soon as one command fails, the task aborts.
+
+    deploy:
+        vars:
+            important_test: ./xt/test.t
+        cmds:
+            - dzil build
+            - perl {{ $important_test }}
+            - dzil release
+
+A command can also be a subtask, with potentially some associated variables:
+
+    stuff:
+        cmds:
+            - task: other_stuff
+              vars:
+                foo: bar
+                baz: quux
+
+
