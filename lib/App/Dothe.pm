@@ -1,5 +1,5 @@
 package App::Dothe;
-# ABSTRACT: YAML-based build system
+# ABSTRACT: YAML-based task runner
 
 use 5.20.0;
 use warnings;
