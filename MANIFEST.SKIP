@@ -1,7 +1,0 @@
-^dist.ini
-^MANIFEST.SKIP
-App-Dothe.*
-^\.gitignore
-^\.git
-^\.build
-

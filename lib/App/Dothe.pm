@@ -1,6 +1,7 @@
 package App::Dothe;
+our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: YAML-based task runner
-
+$App::Dothe::VERSION = '0.0.1';
 use 5.20.0;
 use warnings;
 
@@ -124,6 +125,20 @@ sub template ($self,$source) {
 
 1;
 
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+App::Dothe - YAML-based task runner
+
+=head1 VERSION
+
+version 0.0.1
+
 =head1 DESCRIPTION
 
 Task runner heavily inspired by Task (L<https://github.com/go-task/task>).
@@ -143,7 +158,6 @@ Basically, that means that in a template all that is surrounded by double curley
 is evaluated as Perl code. Those code snippets are evaluated within the
 C<App::Dothe::Sandbox> namespace, and have all the C<vars> variables
 accessible to them.
-
 
 =head2 C<code> section
 
@@ -265,4 +279,15 @@ A command can also be a subtask, with potentially some associated variables:
                 foo: bar
                 baz: quux
 
+=head1 AUTHOR
 
+Yanick Champoux <yanick@babyl.ca>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2019 by Yanick Champoux.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
